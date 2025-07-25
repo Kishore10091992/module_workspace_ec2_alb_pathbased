@@ -7,26 +7,48 @@ terraform {
   }
 }
 
+locals {
+  project = "module_workspace"
+
+  region_map = {
+    dev = var.dev_region
+    stg = var.stg_region
+    prd = var.prd_region
+  }
+
+  az_1_map = {
+    dev = var.dev_az_1
+    stg = var.stg_az_1
+    prd = var.prd_az_1
+  }
+
+  az_2_map = {
+    dev = var.dev_az_2
+    stg = var.stg_az_2
+    prd = var.prd_az_2
+  }
+}
+
 provider "aws" {
-  region = var.aws_region
+  region = lookup(local.region_map, terraform.workspace, var.dev_region)
 }
 
 module "vpc" {
   source         = "./modules/vpc"
   vpc_cidr       = "172.168.0.0/16"
-  vpc_tags       = { Name = "main_vpc" }
+  vpc_tags       = { Name = "${local.project}-main_vpc-${terraform.workspace}" }
   sub_1-cidr     = "172.168.0.0/24"
-  az-1           = "us-east-1a"
-  sub-1_tags     = { Name = "main_subnet-1" }
+  az-1           = lookup(local.az_1_map, terraform.workspace, var.dev_az_1)
+  sub-1_tags     = { Name = "${local.project}-main_subnet-1-${terraform.workspace}" }
   sub_2-cidr     = "172.168.1.0/24"
-  az-2           = "us-east-1c"
-  sub-2_tags     = { Name = "main_subnet-2" }
-  IGW_tags       = { Name = "main_IGW" }
+  az-2           = lookup(local.az_2_map, terraform.workspace, var.dev_az_2)
+  sub-2_tags     = { Name = "${local.project}-main_subnet-2-${terraform.workspace}" }
+  IGW_tags       = { Name = "${local.project}-main_IGW-${terraform.workspace}" }
   route_ip       = "0.0.0.0/0"
   sg_id          = [module.security_group.sg_id]
-  rt_tags        = { Name = "main_rt" }
-  app-1_eip_tags = { Name = "app-1_eip" }
-  app-2_eip_tags = { Name = "app-2_eip" }
+  rt_tags        = { Name = "${local.project}-main_rt-${terraform.workspace}" }
+  app-1_eip_tags = { Name = "${local.project}-app-1_eip-${terraform.workspace}" }
+  app-2_eip_tags = { Name = "${local.project}-app-2_eip-${terraform.workspace}" }
 }
 
 module "security_group" {
@@ -36,7 +58,7 @@ module "security_group" {
   to_port     = 0
   protocol    = "-1"
   cidr_blocks = ["0.0.0.0/0"]
-  tags        = { Name = "main_security_group" }
+  tags        = { Name = "${local.project}-main_security_group-${terraform.workspace}" }
 }
 
 data "aws_ami" "ec2_ami" {
@@ -59,7 +81,7 @@ resource "aws_key_pair" "main_key" {
   public_key = tls_private_key.generate_key.public_key_openssh
 
   tags = {
-    Name = "main_key"
+    Name = "${local.project}-main_key-${terraform.workspace}"
   }
 }
 
@@ -78,7 +100,7 @@ module "app-1" {
                      mkdir -p /usr/share/nginx/html/app-1
                      echo "This is app-1" > /usr/share/nginx/html/app-1/index.html
                 EOF
-  tags           = { Name = "app-1_ec2" }
+  tags           = { Name = "${local.project}-app-1_ec2-${terraform.workspace}" }
 }
 
 module "app-2" {
@@ -96,7 +118,7 @@ module "app-2" {
                      mkdir -p /usr/share/nginx/html/app-1
                      echo "This is app-2" > /usr/share/nginx/html/app-1/index.html
                    EOF
-  tags           = { Name = "app-2_ec2" }
+  tags           = { Name = "${local.project}-app-2_ec2-${terraform.workspace}" }
 }
 
 module "alb" {
@@ -106,11 +128,10 @@ module "alb" {
   sg_id         = module.security_group.sg_id
   sub_1_id      = module.vpc.sub_1_id
   sub_2_id      = module.vpc.sub_2_id
-  lb_tags       = { Name = "main_alb" }
+  lb_tags       = { Name = "${local.project}-main_alb-${terraform.workspace}" }
   vpc_id        = module.vpc.vpc_id
-  app-1_tg_tags = { Name = "app-1_tg" }
+  app-1_tg_tags = { Name = "${local.project}-app-1_tg-${terraform.workspace}" }
   app-1_id      = module.app-1.app-1_id
-  app-2_tg_tags = { Name = "app-1_tg" }
+  app-2_tg_tags = { Name = "${local.project}-app-1_tg-${terraform.workspace}" }
   app-2_id      = module.app-2.app-2_id
 }
-
